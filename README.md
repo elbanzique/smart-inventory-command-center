@@ -35,8 +35,8 @@ they're added). Current phase: **Phase 1 — project setup & data architecture**
 |---|---|---|
 | 1 | Project setup, architecture & data model design | Done |
 | 2 | Synthetic data generation | Done |
-| 3 | ETL — load into SQLite | Pending |
-| 4 | SQL analysis — core business questions | Pending |
+| 3 | ETL — load into SQLite | Done |
+| 4 | SQL analysis — core business questions | Done |
 | 5 | Python/Pandas deep-dive analysis (supplier reliability, dead stock) | Pending |
 | 6 | Power BI dashboard | Pending |
 | 7 | Documentation, tests & polish | Pending |
@@ -80,6 +80,17 @@ Run the test suite with:
 ```bash
 pytest
 ```
+
+## Loading into SQLite and running the analysis
+
+```bash
+python -m src.etl.load_to_db      # builds sql/schema.sql, loads all CSVs, verifies FK integrity
+python -m src.analysis.run_queries  # runs all 6 business-question queries, saves results to data/processed/
+```
+
+Each business question has its own file under `sql/queries/` (see
+`docs/data_dictionary.md` for the full list and design rationale behind
+each one).
 
 ## Architecture
 

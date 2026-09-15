@@ -4,8 +4,10 @@ This file is the single source of truth for every field in the project's
 database. It is updated at the end of each phase as new tables/columns are
 introduced. See `docs/architecture.md` for the full ERD and design rationale.
 
-> Status: Phase 2 complete — synthetic data generated to `data/raw/*.csv`.
-> Not yet loaded into SQLite (that's Phase 3, `sql/schema.sql`).
+> Status: Phase 4 complete — data generated (Phase 2), loaded into SQLite
+> with full constraints (Phase 3), and analyzed with 6 business-question
+> SQL queries (Phase 4). See `sql/schema.sql` for DDL and `sql/queries/`
+> for the analysis queries.
 
 ## warehouses (3 rows)
 | Column | Type | Notes |
@@ -80,3 +82,42 @@ introduced. See `docs/architecture.md` for the full ERD and design rationale.
 - Stockout-risk share of inventory: ~12% (target band 8-16%)
 - Dead-stock share of inventory: ~10% (target band 6-14%)
 - Revenue concentration: top 20% of products drive ≥55% of revenue (observed ~86%)
+
+## SQLite schema (Phase 3)
+
+`sql/schema.sql` implements the tables above with:
+- `PRIMARY KEY` on every table's natural ID column (`inventory` uses a
+  composite key on `(warehouse_id, product_id)` since it has no single ID)
+- `FOREIGN KEY` constraints on every relationship, enforced via
+  `PRAGMA foreign_keys = ON` (SQLite disables FK enforcement by default —
+  easy to forget, and silently lets bad data in if you do)
+- `CHECK` constraints mirroring the business rules already enforced during
+  generation (e.g. `unit_price >= unit_cost`, `status IN (...)`) so the
+  database itself — not just the Python generator — refuses invalid data
+- Indexes on every foreign key column plus the two date columns
+  (`orders.order_date`, `purchase_orders.order_date`) the Phase 4 queries
+  filter and sort on most heavily
+- All dates stored as `TEXT` in ISO-8601 (`YYYY-MM-DD`) — SQLite has no
+  native date type; ISO-8601 text sorts correctly as a plain string and
+  works directly with SQLite's `date()`/`julianday()` functions
+
+`src/etl/load_to_db.py` rebuilds the database from scratch on every run
+(drop + recreate + reload) rather than attempting incremental updates,
+because the database is a derived artifact of the CSVs, not a hand-edited
+source of truth — there's nothing to "merge."
+
+## Analytical queries (Phase 4)
+
+Each business question from the project brief has its own file under
+`sql/queries/`, run in sequence by `src/analysis/run_queries.py`, which
+prints a preview + a data-driven headline for each and saves the full
+result to `data/processed/<query_name>.csv`.
+
+| Query file | Business question | Key design choice |
+|---|---|---|
+| `warehouse_performance.sql` | Which warehouse performs best? | Revenue aggregated once per order in a CTE before joining to warehouses — joining `order_lines` directly would multiply status flags by line-item count and silently inflate return/cancellation rates |
+| `top_revenue_products.sql` | Which products generate the most revenue? | Reports margin alongside revenue, since a high-revenue/low-margin product may matter less than it looks |
+| `stockout_risk.sql` | Which SKUs are at risk of stockout? | Reported per (product, warehouse) — stockout is a per-location operational problem, not a company-wide average |
+| `supplier_reliability.sql` | Which suppliers are unreliable? | Computed purely from `purchase_orders` history (actual vs. expected delivery dates) — deliberately ignores `suppliers.base_reliability_score`, which is a data-generation artifact a real analyst would never have access to |
+| `dead_stock_value.sql` | How much value is tied up in dead stock? | Valued at `unit_cost`, not `unit_price` — dead stock represents capital already spent, not lost revenue |
+| `reorder_recommendations.sql` | Which products should be reordered? | Sizes a concrete `recommended_order_quantity` (safety stock + 30-day sales velocity − on hand) at the (product, warehouse) grain — a bug caught during development: aggregating stock across all 3 warehouses before comparing to a single-warehouse `reorder_point` made almost every product look artificially healthy |
