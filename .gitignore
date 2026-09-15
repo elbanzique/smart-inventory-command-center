@@ -9,6 +9,9 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 
+# Pytest
+.pytest_cache/
+
 # OS
 .DS_Store
 Thumbs.db

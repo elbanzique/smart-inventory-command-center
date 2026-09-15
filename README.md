@@ -34,7 +34,7 @@ they're added). Current phase: **Phase 1 — project setup & data architecture**
 | Phase | Description | Status |
 |---|---|---|
 | 1 | Project setup, architecture & data model design | Done |
-| 2 | Synthetic data generation | Pending |
+| 2 | Synthetic data generation | Done |
 | 3 | ETL — load into SQLite | Pending |
 | 4 | SQL analysis — core business questions | Pending |
 | 5 | Python/Pandas deep-dive analysis (supplier reliability, dead stock) | Pending |
@@ -60,6 +60,25 @@ smart-inventory-command-center/
 python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+## Generating the synthetic dataset
+
+```bash
+python -m src.data_generation.generate_all
+```
+
+This writes 7 CSVs to `data/raw/` (warehouses, suppliers, products,
+inventory, purchase_orders, orders, order_lines) and runs an automatic
+validation report (referential integrity, positivity constraints, and
+calibration checks against the realism targets in
+`docs/data_dictionary.md`). Everything is seeded (`config.RANDOM_SEED`),
+so re-running this produces byte-identical output.
+
+Run the test suite with:
+
+```bash
+pytest
 ```
 
 ## Architecture
