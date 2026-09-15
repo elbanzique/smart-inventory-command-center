@@ -124,3 +124,65 @@ def test_purchase_order_delivery_status_is_valid(small_dataset):
     po = small_dataset["purchase_orders"]
     delivered = po.dropna(subset=["actual_delivery_date"])
     assert (pd.to_datetime(delivered["actual_delivery_date"]) >= pd.to_datetime(delivered["order_date"])).all()
+
+
+# ---------------------------------------------------------------------------
+# Cross-table independence regression tests
+#
+# These exist because of a real bug: every generator module called an
+# unparameterized get_rng() returning default_rng(42) — the SAME stream. Since
+# numpy draws categorical samples by inverse-CDF on an underlying uniform
+# sequence, orders.py (drawing each order's month) and order_lines.py (drawing
+# each order's line count) consumed identical uniforms u[i], making the two
+# perfectly rank-correlated: every 2024 order had exactly 1 line and every
+# Dec-2025 order had exactly 4, producing a phantom 2.4x revenue "growth trend".
+#
+# Every marginal distribution was still correct, so no single-table check
+# caught it. Only a cross-table assertion can.
+# ---------------------------------------------------------------------------
+
+def test_random_streams_are_independent():
+    """Two named streams must not produce rank-correlated draws."""
+    import numpy as np
+    from src.data_generation.utils import get_rng
+
+    a = get_rng("orders").choice(24, size=20_000, p=np.full(24, 1 / 24))
+    b = get_rng("order_lines").choice([1, 2, 3, 4], size=20_000, p=[0.45, 0.30, 0.15, 0.10])
+    corr = np.corrcoef(a, b)[0, 1]
+    assert abs(corr) < 0.05, f"streams are correlated (r={corr:.3f}) — seed reuse regression"
+
+
+def test_same_stream_name_is_reproducible():
+    """Independence must not come at the cost of reproducibility."""
+    from src.data_generation.utils import get_rng
+
+    first = get_rng("orders").integers(0, 1_000_000, size=500)
+    second = get_rng("orders").integers(0, 1_000_000, size=500)
+    assert (first == second).all()
+
+
+def test_lines_per_order_is_stable_over_time(small_dataset):
+    """Basket size must not drift with order date.
+
+    This is the assertion that would have caught the seed-reuse bug: it
+    joins two separately-generated tables and checks that a property of one
+    is independent of a property of the other.
+    """
+    import pandas as pd
+
+    orders = small_dataset["orders"].copy()
+    order_lines = small_dataset["order_lines"]
+
+    lines_per_order = order_lines.groupby("order_id").size().rename("n_lines")
+    merged = orders.join(lines_per_order, on="order_id")
+    merged["order_date"] = pd.to_datetime(merged["order_date"])
+    merged["half"] = (merged["order_date"] >= merged["order_date"].median()).map(
+        {False: "first", True: "second"}
+    )
+
+    means = merged.groupby("half")["n_lines"].mean()
+    # Allow generous tolerance for the small test dataset; the bug produced
+    # a 4x gap, so anything near parity proves independence.
+    assert abs(means["first"] - means["second"]) < 0.4, (
+        f"basket size drifts with date: {means.to_dict()}"
+    )

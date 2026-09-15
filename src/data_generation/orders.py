@@ -37,7 +37,7 @@ def generate_orders(warehouses_df: pd.DataFrame, n: int = config.N_ORDERS) -> pd
     ~90% on-time/successful delivery benchmark referenced in
     docs/architecture.md and typical e-commerce return rates.
     """
-    rng = get_rng()
+    rng = get_rng("orders")
     sim_start = pd.Timestamp(config.SIMULATION_START_DATE)
     sim_end = pd.Timestamp(config.SIMULATION_END_DATE)
 

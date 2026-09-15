@@ -4,10 +4,23 @@ This file is the single source of truth for every field in the project's
 database. It is updated at the end of each phase as new tables/columns are
 introduced. See `docs/architecture.md` for the full ERD and design rationale.
 
-> Status: Phase 4 complete — data generated (Phase 2), loaded into SQLite
-> with full constraints (Phase 3), and analyzed with 6 business-question
-> SQL queries (Phase 4). See `sql/schema.sql` for DDL and `sql/queries/`
-> for the analysis queries.
+> Status: Phase 6 complete — data generated (Phase 2), loaded into SQLite
+> (Phase 3), analyzed with SQL (Phase 4) and Pandas (Phase 5), and exported
+> as a Power BI-ready star schema (Phase 6). See `sql/schema.sql` for DDL,
+> `sql/queries/` for SQL analysis, `src/analysis/` for the Pandas layer, and
+> `docs/powerbi_guide.md` for the dashboard build spec.
+>
+> **Bug fixes during Phase 5** (both caught by cross-table checks after
+> passing every single-table validation — see README "Notable engineering
+> decisions" for the full story):
+> 1. `safety_stock`/`reorder_point` were originally sized from an arbitrary
+>    rank-percentile formula disconnected from actual demand, producing
+>    0.04x inventory turnover. Replaced with demand-derived formulas
+>    (`lead_time_demand → safety_stock → reorder_point`) in `products.py`.
+> 2. Every generator module shared one random stream, silently correlating
+>    `orders.py` and `order_lines.py` and manufacturing a phantom 2.4x
+>    revenue growth trend. Fixed with independent named streams in
+>    `utils.get_rng()`.
 
 ## warehouses (3 rows)
 | Column | Type | Notes |
@@ -36,8 +49,8 @@ introduced. See `docs/architecture.md` for the full ERD and design rationale.
 | unit_cost | float | category-calibrated cost range |
 | unit_price | float | unit_cost × (1 + category margin) |
 | supplier_id | int | FK → suppliers; matched to supplier's primary_category where possible |
-| reorder_point | int | inventory threshold that should trigger a reorder |
-| safety_stock | int | buffer stock; scales with demand percentile |
+| reorder_point | int | derived from demand: `lead_time_demand + safety_stock` (see products.py) — per-warehouse threshold |
+| safety_stock | int | derived from demand: `lead_time_demand × SAFETY_STOCK_FACTOR` (config.py); replaced an earlier rank-percentile formula that was disconnected from actual sales velocity — see "Bug fixes" note below |
 | popularity_score | float | **Simulation-only field** — Pareto/Zipf demand weight, not present in a real system. Drives order_lines product selection. Documented for transparency; see products.py docstring |
 
 ## inventory (15,000 rows — one per product × warehouse)

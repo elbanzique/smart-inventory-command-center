@@ -25,7 +25,7 @@ def generate_inventory(products_df: pd.DataFrame, warehouses_df: pd.DataFrame) -
     fine, with a meaningful minority in each problem category. A uniform
     spread would make the business questions trivial or meaningless to ask.
     """
-    rng = get_rng()
+    rng = get_rng("inventory")
     n_products = len(products_df)
     n_warehouses = len(warehouses_df)
 

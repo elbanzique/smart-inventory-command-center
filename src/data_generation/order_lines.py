@@ -30,7 +30,7 @@ def generate_order_lines(orders_df: pd.DataFrame, products_df: pd.DataFrame) -> 
     concrete justification for storing this as its own column rather than
     just joining to products.unit_price (see docs/architecture.md).
     """
-    rng = get_rng()
+    rng = get_rng("order_lines")
     n_orders = len(orders_df)
 
     line_counts = rng.choice([1, 2, 3, 4], size=n_orders, p=[0.45, 0.30, 0.15, 0.10])

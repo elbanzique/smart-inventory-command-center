@@ -1,0 +1,225 @@
+// =============================================================================
+// NovaLog Distribution — DAX measure library
+// Smart Inventory Command Center, Phase 6
+//
+// Paste these into Power BI Desktop as measures. Recommended: create a blank
+// table named "_Measures" (Home > Enter data, leave it empty, name it
+// "_Measures") and put every measure there, so they group together in the
+// Fields pane instead of scattering across the fact tables.
+//
+// Convention used throughout: measures are explicit (written by hand) rather
+// than implicit (dragging a column and letting Power BI pick SUM). Explicit
+// measures are reusable, testable, and don't silently change behavior when
+// filter context shifts — this is standard practice on real BI teams.
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// 1. Sales & profitability
+// -----------------------------------------------------------------------------
+
+Total Revenue =
+SUM ( fact_sales[line_revenue] )
+
+Total Margin =
+SUM ( fact_sales[line_margin] )
+
+Total COGS =
+SUM ( fact_sales[line_cogs] )
+
+Margin % =
+DIVIDE ( [Total Margin], [Total Revenue] )
+// DIVIDE, not "/", because DIVIDE returns BLANK on divide-by-zero instead of
+// an error. Every ratio measure below follows this rule.
+
+Total Units Sold =
+SUM ( fact_sales[quantity] )
+
+Order Count =
+DISTINCTCOUNT ( fact_sales[order_id] )
+// fact_sales is at order-LINE grain, so a plain COUNTROWS would count lines,
+// not orders. DISTINCTCOUNT on order_id is the correct order-level measure.
+
+Average Order Value =
+DIVIDE ( [Total Revenue], [Order Count] )
+
+Lines per Order =
+DIVIDE ( COUNTROWS ( fact_sales ), [Order Count] )
+
+
+// -----------------------------------------------------------------------------
+// 2. Order quality
+// -----------------------------------------------------------------------------
+
+Returned Orders =
+CALCULATE (
+    [Order Count],
+    fact_sales[status] = "Returned"
+)
+
+Return Rate % =
+DIVIDE ( [Returned Orders], [Order Count] )
+
+Delivered Revenue =
+CALCULATE (
+    [Total Revenue],
+    fact_sales[status] = "Delivered"
+)
+
+
+// -----------------------------------------------------------------------------
+// 3. Time intelligence
+//
+// All of these require dim_date to be marked as the model's date table:
+//   Select dim_date > Table tools > Mark as date table > Date column: [date]
+// Without that, these return wrong results silently rather than erroring.
+// -----------------------------------------------------------------------------
+
+Revenue YTD =
+TOTALYTD ( [Total Revenue], dim_date[date] )
+
+Revenue PY =
+CALCULATE ( [Total Revenue], SAMEPERIODLASTYEAR ( dim_date[date] ) )
+
+Revenue YoY % =
+VAR PriorYear = [Revenue PY]
+RETURN
+    DIVIDE ( [Total Revenue] - PriorYear, PriorYear )
+// Assigned to a variable first so [Revenue PY] is evaluated once rather than
+// twice — a small performance habit that matters on large models.
+
+Revenue PM =
+CALCULATE ( [Total Revenue], DATEADD ( dim_date[date], -1, MONTH ) )
+
+Revenue MoM % =
+VAR PriorMonth = [Revenue PM]
+RETURN
+    DIVIDE ( [Total Revenue] - PriorMonth, PriorMonth )
+
+Revenue 3M Moving Average =
+AVERAGEX (
+    DATESINPERIOD ( dim_date[date], MAX ( dim_date[date] ), -3, MONTH ),
+    [Total Revenue]
+)
+
+
+// -----------------------------------------------------------------------------
+// 4. Inventory
+// -----------------------------------------------------------------------------
+
+Inventory Value =
+SUM ( fact_inventory[inventory_value] )
+
+Units On Hand =
+SUM ( fact_inventory[quantity_on_hand] )
+
+SKUs Below Reorder Point =
+CALCULATE (
+    COUNTROWS ( fact_inventory ),
+    fact_inventory[is_below_reorder_point] = TRUE ()
+)
+
+Stockout Risk % =
+DIVIDE ( [SKUs Below Reorder Point], COUNTROWS ( fact_inventory ) )
+
+Inventory Turnover =
+DIVIDE ( [Total COGS], [Inventory Value] )
+// Caveat carried over from the Phase 5 analysis: this dataset holds a single
+// current stock snapshot, not a historical series, so this uses ending
+// inventory rather than true average inventory. Valid for comparing
+// categories against each other; treat absolute values as approximate.
+
+Days of Supply =
+DIVIDE ( 365, [Inventory Turnover] )
+
+Dead Stock Value =
+CALCULATE (
+    [Inventory Value],
+    FILTER (
+        fact_inventory,
+        fact_inventory[quantity_on_hand] >= fact_inventory[safety_stock] * 4
+    )
+)
+
+Dead Stock % of Inventory =
+DIVIDE ( [Dead Stock Value], [Inventory Value] )
+
+
+// -----------------------------------------------------------------------------
+// 5. Supplier performance
+// -----------------------------------------------------------------------------
+
+Purchase Order Count =
+COUNTROWS ( fact_purchase_orders )
+
+Delivered POs =
+CALCULATE (
+    [Purchase Order Count],
+    fact_purchase_orders[is_delivered] = TRUE ()
+)
+
+Late POs =
+CALCULATE (
+    [Purchase Order Count],
+    fact_purchase_orders[is_late] = TRUE ()
+)
+
+Late Delivery Rate % =
+DIVIDE ( [Late POs], [Delivered POs] )
+// Denominator is DELIVERED POs, not all POs. Including still-in-transit
+// orders (actual_delivery_date is null) in the denominator would understate
+// the lateness rate, since an undelivered PO cannot yet be judged late.
+
+On-Time Delivery Rate % =
+1 - [Late Delivery Rate %]
+
+Average Delay Days =
+CALCULATE (
+    AVERAGE ( fact_purchase_orders[delay_days] ),
+    fact_purchase_orders[is_delivered] = TRUE ()
+)
+
+High Risk Suppliers =
+CALCULATE (
+    DISTINCTCOUNT ( dim_supplier[supplier_id] ),
+    dim_supplier[risk_tier] = "High Risk"
+)
+
+
+// -----------------------------------------------------------------------------
+// 6. ABC analysis
+// -----------------------------------------------------------------------------
+
+Class A Revenue =
+CALCULATE ( [Total Revenue], dim_product[abc_class] = "A" )
+
+Class A Revenue % =
+DIVIDE ( [Class A Revenue], CALCULATE ( [Total Revenue], ALL ( dim_product ) ) )
+// ALL(dim_product) removes any product-level filter from the denominator, so
+// this always compares against TOTAL revenue rather than the filtered subset.
+// Without ALL, this measure would return 100% inside a class-A-filtered visual.
+
+Class A SKU Count =
+CALCULATE ( DISTINCTCOUNT ( dim_product[product_id] ), dim_product[abc_class] = "A" )
+
+
+// -----------------------------------------------------------------------------
+// 7. Formatting helpers (dynamic titles / conditional formatting)
+// -----------------------------------------------------------------------------
+
+Revenue YoY Arrow =
+VAR Change = [Revenue YoY %]
+RETURN
+    SWITCH (
+        TRUE (),
+        ISBLANK ( Change ), "",
+        Change > 0, "▲ " & FORMAT ( Change, "0.0%" ),
+        Change < 0, "▼ " & FORMAT ( Change, "0.0%" ),
+        "– 0.0%"
+    )
+
+Selected Period Label =
+VAR MinDate = MIN ( dim_date[date] )
+VAR MaxDate = MAX ( dim_date[date] )
+RETURN
+    FORMAT ( MinDate, "MMM yyyy" ) & " – " & FORMAT ( MaxDate, "MMM yyyy" )

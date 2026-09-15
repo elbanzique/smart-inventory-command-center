@@ -43,7 +43,7 @@ def generate_purchase_orders(products_df: pd.DataFrame, suppliers_df: pd.DataFra
     simply hasn't happened yet from the business's point of view. This
     gives later phases a realistic, small population of still-open POs.
     """
-    rng = get_rng()
+    rng = get_rng("purchase_orders")
     sim_start = pd.Timestamp(config.SIMULATION_START_DATE)
     sim_end = pd.Timestamp(config.SIMULATION_END_DATE)
     window_days = (sim_end - sim_start).days

@@ -39,7 +39,7 @@ def generate_suppliers(n: int = config.N_SUPPLIERS) -> pd.DataFrame:
     documented in docs/architecture.md and docs/data_dictionary.md.
     """
     fake = get_faker()
-    rng = get_rng()
+    rng = get_rng("suppliers")
 
     reliability = rng.beta(8, 2, size=n)
     base_lead_time = rng.integers(3, 21, size=n)

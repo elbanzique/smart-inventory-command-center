@@ -8,6 +8,8 @@ own ad-hoc randomness. See docs/architecture.md, section 5, for why these
 specific calibrations were chosen (reference-informed simulation).
 """
 
+import zlib
+
 import numpy as np
 import pandas as pd
 from faker import Faker
@@ -15,17 +17,41 @@ from faker import Faker
 from src import config
 
 
-def get_rng(seed: int = config.RANDOM_SEED) -> np.random.Generator:
-    """Return a fresh, seeded numpy random Generator.
+def get_rng(stream: str, seed: int = config.RANDOM_SEED) -> np.random.Generator:
+    """Return a reproducible Generator on its own independent random stream.
 
-    We use numpy's modern Generator API (np.random.default_rng) rather than
-    the legacy global np.random.seed(). Every generator function calls this
-    with the same default seed, so re-running the full pipeline from a
-    clean checkout always reproduces byte-identical CSVs — a hard
-    requirement for a portfolio project (your README/Power BI screenshots
-    must match what a reviewer sees when they run the code themselves).
+    `stream` is a short name identifying the caller (e.g. "orders",
+    "order_lines"). Each distinct name yields a statistically independent
+    sequence, while the same name always yields the same sequence — so the
+    pipeline stays byte-for-byte reproducible from a clean checkout.
+
+    Why named streams instead of one shared seed
+    ----------------------------------------------
+    Every module used to call an unparameterized get_rng(), which returned
+    default_rng(42) — literally the same stream in each module. Because
+    numpy draws categorical samples by inverse-CDF on an underlying
+    uniform sequence, two modules whose FIRST draw was an
+    rng.choice(size=100_000, p=...) both consumed the same uniforms u[i].
+    That silently made their outputs rank-correlated: in this project,
+    orders.py drew each order's month and order_lines.py drew each order's
+    line count from identical u[i], so a low u meant "early month AND 1
+    line" and a high u meant "late month AND 4 lines". The result was that
+    every 2024 order had exactly 1 line and every Dec-2025 order had
+    exactly 4 — a 2.4x phantom revenue "growth trend" that was purely an
+    artifact of seed reuse.
+
+    Crucially, every marginal distribution was still perfect (line counts
+    were 45/30/15/10 as specified, months followed the seasonal curve), so
+    single-table validation passed. Only a cross-table check — lines per
+    order BY MONTH — could expose it. Hence tests/test_data_generation.py
+    now asserts stream independence directly.
     """
-    return np.random.default_rng(seed)
+    # SeedSequence hashes the (seed, stream-name) pair into a high-quality
+    # independent entropy source. This is numpy's supported way to derive
+    # decorrelated streams; simple seed+1, seed+2 offsets are not
+    # guaranteed to be independent.
+    entropy = [seed, zlib.crc32(stream.encode("utf-8"))]
+    return np.random.default_rng(np.random.SeedSequence(entropy))
 
 
 def get_faker(seed: int = config.RANDOM_SEED) -> Faker:
@@ -83,7 +109,7 @@ def pareto_weights(n: int, alpha: float = 1.0, seed: int = config.RANDOM_SEED) -
     deterministic no matter when/how many other random draws happened
     before it — important since it's called from multiple modules.
     """
-    rng = np.random.default_rng(seed)
+    rng = get_rng("pareto_weights", seed)
     ranks = np.arange(1, n + 1)
     raw = 1 / np.power(ranks, alpha)
     rng.shuffle(raw)
