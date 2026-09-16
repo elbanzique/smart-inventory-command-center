@@ -35,7 +35,7 @@ data analyst is asked in practice.
 | Inventory value at cost | $8.0M |
 | Capital in dead stock | $3.4M (42% of inventory) |
 | Suppliers flagged High Risk | 4 of 50 |
-| Supplier scorecard validity | r = 0.85 correlation vs. hidden ground-truth reliability (see Phase 5 notes below) |
+| Supplier scorecard validity | r = 0.838 correlation vs. hidden ground-truth reliability (see Phase 5 notes below) |
 
 ## Project status
 
@@ -50,7 +50,7 @@ Built incrementally in numbered phases, each with its own design notes under
 | 4 | SQL analysis — core business questions | Done |
 | 5 | Python/Pandas deep-dive analysis (ABC, dead stock, supplier scorecard) | Done |
 | 6 | Power BI star schema, DAX measures & build guide | Done |
-| 7 | Final documentation, tests & polish | Pending |
+| 7 | Final documentation: UML diagrams + LaTeX technical report | Done |
 
 ## Repository structure
 
@@ -61,7 +61,18 @@ smart-inventory-command-center/
 │   ├── processed/        # SQL query outputs (generated, gitignored)
 │   ├── powerbi_export/   # star-schema CSVs for Power BI (generated, gitignored)
 │   └── database/         # novalog.db (generated, gitignored)
-├── docs/                 # architecture, data dictionary, Power BI build guide
+├── docs/
+│   ├── architecture.md      # data model rationale, reference-informed simulation strategy
+│   ├── data_dictionary.md   # every column, every table, why it exists
+│   ├── powerbi_guide.md     # step-by-step Power BI build spec
+│   ├── diagrams/            # 3 UML diagrams: PlantUML source (.puml) + rendered PNG
+│   │   ├── data_model.puml/.png       # class diagram — 7-table schema, PK/FK, cardinality
+│   │   ├── architecture.puml/.png     # component diagram — 6-phase pipeline data flow
+│   │   └── pipeline_sequence.puml/.png # sequence diagram — full execution order
+│   └── report/
+│       ├── report.tex       # LaTeX source for the full technical report
+│       └── report.pdf       # compiled 23-page report (architecture, methodology,
+│                             # results, engineering postmortem, future extensions)
 ├── src/
 │   ├── config.py         # single source of truth for paths & business constants
 │   ├── data_generation/  # Phase 2 — 7 generator modules + validation
@@ -121,6 +132,22 @@ What *is* prepared: the full dimensional (star schema) model
 page-by-page report design. Building the report from these takes about an
 hour in Power BI Desktop.
 
+## Final documentation: UML diagrams & technical report
+
+- **`docs/diagrams/`** — three UML diagrams, written as PlantUML source and
+  pre-rendered to PNG (both committed, so nothing needs regenerating just
+  to read the docs): a **class diagram** for the 7-table data model (PK/FK
+  stereotypes, association multiplicities), a **component diagram** for
+  the 6-phase pipeline architecture, and a **sequence diagram** for a full
+  end-to-end pipeline run. See `docs/diagrams/README.md` for how to
+  regenerate them after an edit.
+- **`docs/report/report.pdf`** — a 23-page LaTeX technical report covering
+  architecture, the data model, methodology (including the calibration
+  strategy and both bugs below, told as a full postmortem with before/after
+  tables), the SQL and Pandas analysis results, the Power BI design, the
+  test suite, and honestly-scoped future extensions. Source is
+  `report.tex`; rebuild with `cd docs/report && make`.
+
 ## Notable engineering decisions & bugs caught along the way
 
 Worth reading if you want the "why" behind this project rather than just
@@ -152,7 +179,7 @@ the "what" — these are documented in detail in `docs/architecture.md` and
 - **The supplier scorecard is validated against a hidden ground truth.**
   It's built entirely from observed purchase-order behavior (never reading
   the seed reliability score used only for data generation), then
-  correlated against that hidden seed afterward: r = 0.85, showing the
+  correlated against that hidden seed afterward: r = 0.838, showing the
   methodology recovers genuine reliability signal rather than fitting noise.
 
 ## Architecture

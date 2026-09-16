@@ -1,0 +1,113 @@
+@startuml data_model
+!theme plain
+skinparam backgroundColor white
+skinparam classFontName Helvetica
+skinparam classFontSize 13
+skinparam classAttributeFontName Helvetica
+skinparam classAttributeFontSize 11
+skinparam classFontStyle bold
+skinparam roundcorner 8
+skinparam shadowing false
+skinparam class {
+    BackgroundColor<<Dimension>> #EAF2FB
+    BorderColor<<Dimension>> #2C5C8A
+    BackgroundColor<<Fact>> #FBF0E4
+    BorderColor<<Fact>> #A65D1E
+    ArrowColor #555555
+}
+
+title Smart Inventory Command Center — Data Model (NovaLog Distribution)
+
+class warehouses <<Dimension>> {
+    + warehouse_id : INTEGER <<PK>>
+    --
+    name : TEXT
+    region : TEXT
+    capacity_units : INTEGER
+}
+
+class suppliers <<Dimension>> {
+    + supplier_id : INTEGER <<PK>>
+    --
+    name : TEXT
+    region : TEXT
+    primary_category : TEXT
+    base_reliability_score : REAL
+    avg_lead_time_days : INTEGER
+}
+
+class products <<Dimension>> {
+    + product_id : INTEGER <<PK>>
+    --
+    sku : TEXT <<UNIQUE>>
+    category : TEXT
+    unit_cost : REAL
+    unit_price : REAL
+    # supplier_id : INTEGER <<FK>>
+    reorder_point : INTEGER
+    safety_stock : INTEGER
+    popularity_score : REAL
+}
+
+class inventory <<Fact>> {
+    # warehouse_id : INTEGER <<PK,FK>>
+    # product_id : INTEGER <<PK,FK>>
+    --
+    quantity_on_hand : INTEGER
+    last_restock_date : TEXT
+}
+
+class purchase_orders <<Fact>> {
+    + po_id : INTEGER <<PK>>
+    --
+    # supplier_id : INTEGER <<FK>>
+    # product_id : INTEGER <<FK>>
+    order_date : TEXT
+    expected_delivery_date : TEXT
+    actual_delivery_date : TEXT
+    quantity : INTEGER
+}
+
+class orders <<Fact>> {
+    + order_id : INTEGER <<PK>>
+    --
+    order_date : TEXT
+    # warehouse_id : INTEGER <<FK>>
+    customer_id : INTEGER
+    status : TEXT
+}
+
+class order_lines <<Fact>> {
+    + order_line_id : INTEGER <<PK>>
+    --
+    # order_id : INTEGER <<FK>>
+    # product_id : INTEGER <<FK>>
+    quantity : INTEGER
+    unit_price_at_sale : REAL
+}
+
+suppliers "1" -- "0..*" products : supplies >
+warehouses "1" -- "0..*" inventory : stocks >
+products "1" -- "0..*" inventory : tracked as >
+suppliers "1" -- "0..*" purchase_orders : fulfills >
+products "1" -- "0..*" purchase_orders : replenishes >
+warehouses "1" -- "0..*" orders : fulfilled by >
+orders "1" -- "1..*" order_lines : contains >
+products "1" -- "0..*" order_lines : sold as >
+
+note bottom of products
+  **popularity_score** is a data-generation
+  artifact (Pareto demand weight), not a real
+  business field. Excluded from the Power BI
+  export — see docs/data_dictionary.md.
+end note
+
+note bottom of suppliers
+  **base_reliability_score** is the hidden
+  seed used only to generate realistic
+  purchase-order lateness. The Phase 5
+  supplier scorecard never reads it directly —
+  reliability is measured empirically instead.
+end note
+
+@enduml

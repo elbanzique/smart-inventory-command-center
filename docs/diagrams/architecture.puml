@@ -1,0 +1,84 @@
+@startuml architecture
+!theme plain
+skinparam backgroundColor white
+skinparam componentFontName Helvetica
+skinparam componentFontSize 13
+skinparam databaseFontName Helvetica
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam component {
+    BackgroundColor #EAF2FB
+    BorderColor #2C5C8A
+}
+skinparam database {
+    BackgroundColor #FBF0E4
+    BorderColor #A65D1E
+}
+skinparam folder {
+    BackgroundColor #EFF7EC
+    BorderColor #3F7A44
+}
+skinparam artifact {
+    BackgroundColor #F5EEF8
+    BorderColor #7D3C98
+}
+
+title Smart Inventory Command Center — Pipeline Architecture
+
+package "Phase 2 — Data Generation" {
+  [generate_all.py] as gen
+  folder "data/raw/*.csv\n(7 tables)" as raw
+}
+
+package "Phase 3 — ETL" {
+  [load_to_db.py] as etl
+  database "novalog.db\n(SQLite, schema.sql)" as db
+}
+
+package "Phase 4 — SQL Analysis" {
+  [run_queries.py] as sqlrunner
+  folder "sql/queries/*.sql\n(6 business questions)" as queries
+  folder "data/processed/*.csv" as processed
+}
+
+package "Phase 5 — Pandas Analysis" {
+  [generate_report.py] as pyanalysis
+  artifact "reports/insights_report.md\n+ 7 figures" as report
+}
+
+package "Phase 6 — Power BI" {
+  [export_for_powerbi.py] as bi_export
+  folder "data/powerbi_export/*.csv\n(star schema)" as star
+  artifact "powerbi/measures.dax" as dax
+  [Power BI Desktop] as pbi
+}
+
+gen -down-> raw : writes
+raw -down-> etl : reads
+etl -down-> db : builds + loads
+db -down-> sqlrunner : reads
+queries .up.> sqlrunner : provides SQL
+sqlrunner -down-> processed : writes
+db -down-> pyanalysis : reads
+pyanalysis -down-> report : writes
+db -down-> bi_export : reads
+bi_export -down-> star : writes
+star -down-> pbi : loaded into
+dax .down.> pbi : measures added to
+
+note right of db
+  PRAGMA foreign_keys = ON
+  CHECK constraints on every
+  business rule (unit_price >= unit_cost,
+  status IN (...), quantities >= 0)
+end note
+
+note right of star
+  Normalized OLTP schema is
+  intentionally re-modeled into a
+  star schema here — see
+  docs/architecture.md for why a
+  BI tool needs this, not the raw DB.
+end note
+
+@enduml

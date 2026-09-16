@@ -1,0 +1,72 @@
+@startuml pipeline_sequence
+!theme plain
+skinparam backgroundColor white
+skinparam sequenceFontName Helvetica
+skinparam sequenceFontSize 12
+skinparam shadowing false
+skinparam sequence {
+    ArrowColor #2C5C8A
+    ActorBorderColor #2C5C8A
+    LifeLineBorderColor #888888
+    ParticipantBackgroundColor #EAF2FB
+    ParticipantBorderColor #2C5C8A
+}
+
+title Smart Inventory Command Center — Full Pipeline Execution Order
+
+actor Analyst
+participant "generate_all.py" as Gen
+participant "validate.py" as GenValidate
+database "data/raw/*.csv" as Raw
+participant "load_to_db.py" as ETL
+database "novalog.db" as DB
+participant "run_queries.py" as SQLRunner
+participant "generate_report.py" as PandasAnalysis
+participant "export_for_powerbi.py" as BIExport
+database "data/powerbi_export/*.csv" as Star
+
+Analyst -> Gen : python -m src.data_generation.generate_all
+activate Gen
+Gen -> Gen : generate 7 tables\n(warehouses..order_lines)
+Gen -> Raw : write CSVs
+Gen -> GenValidate : validate_all(tables)
+GenValidate --> Gen : 22/22 checks pass
+deactivate Gen
+
+Analyst -> ETL : python -m src.etl.load_to_db
+activate ETL
+ETL -> DB : executescript(schema.sql)
+ETL -> Raw : read CSVs
+ETL -> DB : INSERT (dependency order)
+ETL -> DB : PRAGMA foreign_key_check
+DB --> ETL : 0 violations
+deactivate ETL
+
+Analyst -> SQLRunner : python -m src.analysis.run_queries
+activate SQLRunner
+SQLRunner -> DB : run 6 business-question queries
+DB --> SQLRunner : result sets
+SQLRunner -> SQLRunner : save to data/processed/*.csv\n+ print data-driven headline
+deactivate SQLRunner
+
+Analyst -> PandasAnalysis : python -m src.analysis.generate_report
+activate PandasAnalysis
+PandasAnalysis -> DB : load_sales_detail(), load_table(...)
+PandasAnalysis -> PandasAnalysis : ABC classification\ndead-stock aging\nsupplier scorecard (r=0.85 vs seed)
+PandasAnalysis -> PandasAnalysis : render 7 matplotlib figures
+PandasAnalysis --> Analyst : reports/insights_report.md
+deactivate PandasAnalysis
+
+Analyst -> BIExport : python -m src.etl.export_for_powerbi
+activate BIExport
+BIExport -> DB : load_table(...), load_sales_detail()
+BIExport -> BIExport : classify_abc(), build_supplier_scorecard()
+BIExport -> BIExport : build_dim_date() (contiguous, fiscal year)
+BIExport -> Star : write 4 dims + 3 facts
+BIExport -> BIExport : validate_star_schema()\n(13 integrity checks)
+BIExport --> Analyst : star schema ready
+deactivate BIExport
+
+Analyst -> Analyst : open Power BI Desktop,\nfollow docs/powerbi_guide.md
+
+@enduml
