@@ -97,6 +97,26 @@ source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+## Opening in VS Code
+
+The repo ships a `.vscode/` folder so this works with no manual setup beyond
+creating the venv above:
+
+1. **File → Open Folder** → select `smart-inventory-command-center/`.
+2. Install the **Python** extension (ms-python.python) if prompted — VS Code
+   usually prompts automatically when it sees `.py` files.
+3. **Ctrl+Shift+P → Python: Select Interpreter** → choose `./venv/bin/python`
+   (`.vscode/settings.json` already points here; this step confirms it if
+   VS Code doesn't pick it up automatically).
+4. Open the **Testing** sidebar (flask/beaker icon) → it should auto-discover
+   all 36 tests via `.vscode/settings.json`'s pytest config. Click the play
+   button to run them.
+5. Open **Run and Debug** (Ctrl+Shift+D) → the dropdown at the top has one
+   entry per pipeline stage ("1. Generate synthetic data" through
+   "5. Export Power BI star schema") — select one and press F5 to run it
+   with breakpoints/variable inspection, or just use the integrated
+   terminal commands below.
+
 ## Running the full pipeline
 
 Each stage reads the previous stage's output, so run them in order:
@@ -106,7 +126,8 @@ python -m src.data_generation.generate_all   # 1. synthetic CSVs -> data/raw/
 python -m src.etl.load_to_db                 # 2. build SQLite DB, verify FK integrity
 python -m src.analysis.run_queries           # 3. run the 6 SQL business questions -> data/processed/
 python -m src.analysis.generate_report       # 4. ABC/dead-stock/supplier analysis -> reports/
-python -m src.etl.export_for_powerbi         # 5. star-schema export -> data/powerbi_export/
+python -m src.analysis.generate_dashboard    # 5. self-contained HTML dashboard -> reports/dashboard.html
+python -m src.etl.export_for_powerbi         # 6. star-schema export -> data/powerbi_export/
 ```
 
 Every step prints its own validation report and fails loudly (non-zero
@@ -120,6 +141,25 @@ Run the test suite with:
 ```bash
 pytest          # 36 tests: generation, ETL/schema, SQL queries, star-schema export
 ```
+
+## Seeing results without Power BI
+
+Power BI Desktop is Windows-only and takes ~an hour to assemble (see below).
+For an immediate, no-install alternative:
+
+```bash
+python -m src.analysis.generate_dashboard
+```
+
+Writes a single self-contained file, `reports/dashboard.html` — open it
+directly in any browser (double-click it, or drag it into a browser
+window; no local server needed). It reuses the exact same Phase 5 analysis
+functions (`classify_abc`, `build_supplier_scorecard`, `analyze_dead_stock`)
+that produce `reports/insights_report.md`, so the two are guaranteed to
+agree — this isn't a separate, parallel calculation of the same numbers.
+
+This is a static snapshot of whatever's currently in `novalog.db`, not a
+live-querying app — re-run it after regenerating data to refresh it.
 
 ## Power BI dashboard
 

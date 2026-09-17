@@ -1,0 +1,70 @@
+{
+    // Each entry lets you pick a pipeline stage from the "Run and Debug"
+    // dropdown (Ctrl+Shift+D / Cmd+Shift+D) and hit F5 — equivalent to
+    // running the matching `python -m ...` command from the terminal, but
+    // with breakpoints, variable inspection, etc.
+    //
+    // "module" (not "program") is used throughout because every script
+    // here does `from src import config` — that only resolves when Python
+    // runs it as a module from the project root, exactly like the README's
+    // `python -m src.data_generation.generate_all` instructions.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "1. Generate synthetic data",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.data_generation.generate_all",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "2. Load into SQLite",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.etl.load_to_db",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "3. Run SQL business-question queries",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.analysis.run_queries",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "4. Run Pandas analysis + report",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.analysis.generate_report",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "5. Generate HTML dashboard (no Power BI needed)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.analysis.generate_dashboard",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "6. Export Power BI star schema",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.etl.export_for_powerbi",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Run current file",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        }
+    ]
+}
